@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ImsooRich Tools
 
-## Getting Started
+Crypto tools download hub — bundlers, volume bots, snipers, and more. Cross-platform support for Windows, Linux, and macOS.
 
-First, run the development server:
+## Quick Start
 
 ```bash
+npm install
+cp .env.example .env.local
+# Edit .env.local and set your ADMIN_PASSWORD
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Admin Panel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Go to [http://localhost:3000/admin](http://localhost:3000/admin) to:
 
-## Learn More
+- Create new tools (name, description, category, version, tags)
+- Upload platform-specific files (Windows `.exe`/`.zip`, Linux `.sh`/`.AppImage`, macOS `.dmg`)
+- Delete tools
 
-To learn more about Next.js, take a look at the following resources:
+Default admin password: `shiso2024` (change it in `.env.local`)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Support
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Telegram: [https://t.me/shiso02](https://t.me/shiso02)
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Works on Vercel, Railway, or any Node.js host. Make sure:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Set `ADMIN_PASSWORD` environment variable
+2. Use persistent storage for `data/` and `uploads/` (or mount a volume)
+
+```bash
+npm run build
+npm start
+```
+
+## Structure
+
+- `src/app/page.tsx` — Main landing page
+- `src/app/admin/` — Admin upload panel
+- `src/app/api/` — Tools CRUD, file upload/download
+- `data/tools.json` — Tool catalog
+- `uploads/` — Uploaded binary files (per tool ID)

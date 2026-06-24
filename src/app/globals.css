@@ -1,26 +1,514 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-void: #050508;
+  --color-card: #0d0d14;
+  --color-neon-green: #00ff88;
+  --color-neon-purple: #bf5af2;
+  --color-neon-gold: #ffd60a;
+  --color-neon-pink: #ff2d95;
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --font-billboard: var(--font-billboard);
+  --font-sans: var(--font-display);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ff2d9533 transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #030008;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 45, 149, 0.1), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(191, 90, 242, 0.08), transparent),
+    radial-gradient(ellipse 40% 30% at 0% 80%, rgba(0, 255, 136, 0.05), transparent);
+}
+
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+.font-billboard {
+  font-family: var(--font-billboard), var(--font-display), system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 45, 149, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 45, 149, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ── Marquee ticker (night bar style) ── */
+
+.billboard-marquee {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 45, 149, 0.3),
+    inset 0 -1px 0 rgba(255, 45, 149, 0.3),
+    0 0 20px rgba(255, 45, 149, 0.15);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 30s linear infinite;
+}
+
+.marquee-text {
+  flex-shrink: 0;
+  padding-right: 4rem;
+  font-family: var(--font-billboard), monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+  color: #ff2d95;
+  text-shadow:
+    0 0 7px #ff2d95,
+    0 0 14px #ff2d95,
+    0 0 28px rgba(255, 45, 149, 0.5);
+  animation: marquee-flicker 3s step-end infinite;
+}
+
+@keyframes marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-flicker {
+  0%, 18%, 22%, 55%, 58%, 100% { opacity: 1; }
+  20%, 56% { opacity: 0.35; }
+}
+
+/* ── Billboard frame + blinking bulbs ── */
+
+.billboard-frame {
+  position: relative;
+  display: inline-block;
+  padding: 10px;
+  background: linear-gradient(180deg, #120010 0%, #0a0008 100%);
+  border: 2px solid #2a1020;
+  box-shadow:
+    inset 0 0 40px rgba(255, 45, 149, 0.06),
+    0 0 30px rgba(255, 45, 149, 0.12);
+}
+
+.billboard-frame-sm {
+  display: block;
+  width: 100%;
+}
+
+.billboard-frame-card {
+  display: block;
+  width: 100%;
+}
+
+.billboard-frame-pink {
+  border-color: rgba(255, 45, 149, 0.35);
+  box-shadow:
+    inset 0 0 40px rgba(255, 45, 149, 0.08),
+    0 0 25px rgba(255, 45, 149, 0.15);
+}
+
+.billboard-frame-green {
+  border-color: rgba(0, 255, 136, 0.35);
+  box-shadow:
+    inset 0 0 40px rgba(0, 255, 136, 0.06),
+    0 0 25px rgba(0, 255, 136, 0.12);
+}
+
+.billboard-frame-gold {
+  border-color: rgba(255, 214, 10, 0.35);
+  box-shadow:
+    inset 0 0 40px rgba(255, 214, 10, 0.06),
+    0 0 25px rgba(255, 214, 10, 0.12);
+}
+
+.billboard-frame-blue {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow:
+    inset 0 0 40px rgba(59, 130, 246, 0.08),
+    0 0 25px rgba(59, 130, 246, 0.15);
+}
+
+.billboard-frame-orange {
+  border-color: rgba(251, 146, 60, 0.4);
+  box-shadow:
+    inset 0 0 40px rgba(251, 146, 60, 0.08),
+    0 0 25px rgba(251, 146, 60, 0.15);
+}
+
+.billboard-frame-purple {
+  border-color: rgba(191, 90, 242, 0.4);
+  box-shadow:
+    inset 0 0 40px rgba(191, 90, 242, 0.08),
+    0 0 25px rgba(191, 90, 242, 0.15);
+}
+
+.billboard-frame-pink .billboard-bulb {
+  background: #ff2d95;
+  box-shadow: 0 0 4px #ff2d95, 0 0 10px #ff2d95;
+}
+
+.billboard-frame-green .billboard-bulb {
+  background: #00ff88;
+  box-shadow: 0 0 4px #00ff88, 0 0 10px #00ff88;
+}
+
+.billboard-frame-gold .billboard-bulb {
+  background: #ffd60a;
+  box-shadow: 0 0 4px #ffd60a, 0 0 10px #ffd60a;
+}
+
+.billboard-frame-blue .billboard-bulb {
+  background: #3b82f6;
+  box-shadow: 0 0 4px #3b82f6, 0 0 10px #3b82f6;
+}
+
+.billboard-frame-orange .billboard-bulb {
+  background: #fb923c;
+  box-shadow: 0 0 4px #fb923c, 0 0 10px #fb923c;
+}
+
+.billboard-frame-purple .billboard-bulb {
+  background: #bf5af2;
+  box-shadow: 0 0 4px #bf5af2, 0 0 10px #bf5af2;
+}
+
+.billboard-bulbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.billboard-bulb {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  animation: bulb-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes bulb-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  45% { opacity: 0.15; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.1); }
+  55% { opacity: 0.2; }
+  60% { opacity: 1; }
+}
+
+.billboard-inner {
+  position: relative;
+  z-index: 1;
+  padding: 1rem 1.5rem;
+}
+
+.billboard-frame-sm .billboard-inner {
+  padding: 0.5rem;
+}
+
+.billboard-frame-card .billboard-inner {
+  padding: 0;
+}
+
+/* ── Platform signs ── */
+
+.platform-sign {
+  transition: transform 0.25s ease;
+}
+
+.platform-sign:hover {
+  transform: translateY(-4px);
+}
+
+.platform-icon-glow {
+  box-shadow: 0 0 20px rgba(255, 45, 149, 0.15);
+  animation: platform-icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes platform-icon-pulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(255, 45, 149, 0.1); }
+  50% { box-shadow: 0 0 25px rgba(255, 45, 149, 0.25); }
+}
+
+.platform-ready-blink {
+  animation: neon-flicker 2.5s step-end infinite;
+}
+
+.telegram-btn-blink {
+  animation: telegram-glow 2s ease-in-out infinite;
+}
+
+@keyframes telegram-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(34, 158, 217, 0.2); }
+  50% { box-shadow: 0 0 25px rgba(34, 158, 217, 0.45); }
+}
+
+/* ── Neon text (blinking / flickering) ── */
+
+.neon-text {
+  display: inline-block;
+}
+
+.neon-text-pink {
+  color: #ff2d95;
+  text-shadow:
+    0 0 7px #ff2d95,
+    0 0 14px #ff2d95,
+    0 0 28px rgba(255, 45, 149, 0.6),
+    0 0 56px rgba(255, 45, 149, 0.3);
+}
+
+.neon-text-green {
+  color: #00ff88;
+  text-shadow:
+    0 0 7px #00ff88,
+    0 0 14px #00ff88,
+    0 0 28px rgba(0, 255, 136, 0.5);
+}
+
+.neon-text-gold {
+  color: #ffd60a;
+  text-shadow:
+    0 0 7px #ffd60a,
+    0 0 14px #ffd60a,
+    0 0 28px rgba(255, 214, 10, 0.5);
+}
+
+.neon-text-purple {
+  color: #bf5af2;
+  text-shadow:
+    0 0 7px #bf5af2,
+    0 0 14px #bf5af2,
+    0 0 28px rgba(191, 90, 242, 0.5);
+}
+
+.neon-flicker {
+  animation: neon-flicker 4s step-end infinite;
+}
+
+.neon-blink {
+  animation: neon-blink 1.4s step-end infinite;
+}
+
+@keyframes neon-flicker {
+  0%, 18%, 22%, 62%, 64%, 100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  20%, 63% {
+    opacity: 0.4;
+    filter: brightness(0.6);
+  }
+  21%, 61% {
+    opacity: 0.85;
+    filter: brightness(1.2);
+  }
+  40% {
+    opacity: 0.95;
+  }
+  41% {
+    opacity: 0.5;
+  }
+  42% {
+    opacity: 1;
+  }
+}
+
+@keyframes neon-blink {
+  0%, 49%, 51%, 100% { opacity: 1; }
+  50% { opacity: 0.08; }
+}
+
+/* ── OPEN sign (classic bar blink) ── */
+
+.open-sign {
+  display: inline-block;
+  padding: 3px;
+  background: #1a0010;
+  border: 2px solid #ff2d95;
+  box-shadow: 0 0 20px rgba(255, 45, 149, 0.4);
+  animation: open-border-blink 2s step-end infinite;
+}
+
+.open-sign-inner {
+  display: block;
+  padding: 0.4rem 1.5rem;
+  font-family: var(--font-billboard), monospace;
+  font-size: 0.9rem;
+  letter-spacing: 0.25em;
+  color: #ff2d95;
+  text-shadow: 0 0 10px #ff2d95, 0 0 20px #ff2d95;
+  animation: neon-blink 1.8s step-end infinite;
+}
+
+@keyframes open-border-blink {
+  0%, 100% { border-color: #ff2d95; box-shadow: 0 0 20px rgba(255, 45, 149, 0.5); }
+  50% { border-color: #00ff88; box-shadow: 0 0 20px rgba(0, 255, 136, 0.4); }
+}
+
+/* ── Hot badge blink ── */
+
+.hot-badge {
+  padding: 0.25rem 0.6rem;
+  background: rgba(255, 214, 10, 0.1);
+  border: 1px solid rgba(255, 214, 10, 0.5);
+  color: #ffd60a;
+  text-shadow: 0 0 8px #ffd60a;
+  animation: hot-badge-blink 1s step-end infinite;
+}
+
+@keyframes hot-badge-blink {
+  0%, 70%, 100% { opacity: 1; }
+  75% { opacity: 0.3; }
+  80% { opacity: 1; }
+  85% { opacity: 0.2; }
+}
+
+/* ── Buttons ── */
+
+.btn-neon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, rgba(255, 45, 149, 0.2), rgba(255, 45, 149, 0.05));
+  border: 1px solid rgba(255, 45, 149, 0.5);
+  color: #ff2d95;
+  font-family: var(--font-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-shadow: 0 0 8px rgba(255, 45, 149, 0.5);
+}
+
+.btn-neon-blink {
+  animation: btn-neon-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes btn-neon-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 45, 149, 0.3);
+    border-color: rgba(255, 45, 149, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 45, 149, 0.6), 0 0 50px rgba(255, 45, 149, 0.2);
+    border-color: rgba(255, 45, 149, 0.9);
+  }
+}
+
+.btn-neon:hover {
+  background: linear-gradient(135deg, rgba(255, 45, 149, 0.35), rgba(255, 45, 149, 0.1));
+  box-shadow: 0 0 25px rgba(255, 45, 149, 0.5), 0 0 50px rgba(255, 45, 149, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #9ca3af;
+  font-family: var(--font-mono), monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s ease;
+}
+
+.btn-outline-blink {
+  animation: outline-blink 3s step-end infinite;
+}
+
+@keyframes outline-blink {
+  0%, 88%, 100% { border-color: rgba(255, 255, 255, 0.15); color: #9ca3af; }
+  90% { border-color: rgba(191, 90, 242, 0.6); color: #bf5af2; }
+  92% { border-color: rgba(255, 255, 255, 0.15); color: #9ca3af; }
+  94% { border-color: rgba(191, 90, 242, 0.8); color: #bf5af2; }
+}
+
+.btn-outline:hover {
+  border-color: rgba(191, 90, 242, 0.5);
+  color: #bf5af2;
+  background: rgba(191, 90, 242, 0.08);
+  box-shadow: 0 0 15px rgba(191, 90, 242, 0.2);
+}
+
+.neon-link-flicker:hover {
+  animation: neon-flicker 0.5s step-end infinite;
+  text-shadow: 0 0 8px rgba(255, 45, 149, 0.5);
+}
+
+.input-field {
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 45, 149, 0.15);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.875rem;
+  color: #e5e7eb;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-field:focus {
+  border-color: rgba(255, 45, 149, 0.5);
+  box-shadow: 0 0 12px rgba(255, 45, 149, 0.15);
+}
+
+.input-field::placeholder {
+  color: #4b5563;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+.hover\:shadow-neon:hover {
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.25);
+}
+
+.hover\:shadow-card-glow:hover {
+  box-shadow: 0 0 30px rgba(255, 45, 149, 0.12), 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+select.input-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 2.5rem;
+}
+
+select.input-field option {
+  background: #0d0d14;
+  color: #e5e7eb;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .marquee-text,
+  .neon-flicker,
+  .neon-blink,
+  .billboard-bulb,
+  .open-sign,
+  .open-sign-inner,
+  .hot-badge,
+  .btn-neon-blink,
+  .btn-outline-blink {
+    animation: none !important;
+  }
 }
