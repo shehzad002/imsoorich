@@ -84,7 +84,7 @@ export function AdminPanel() {
       });
       const data = await res.json();
       if (res.ok) {
-        showMessage("Tool created! 🚀 Check the homepage after refresh.");
+        showMessage("Tool created! 🚀 Refresh the homepage to see it.");
         setForm({ name: "", description: "", version: "1.0.0", tags: "", featured: false });
         await fetchTools();
       } else {

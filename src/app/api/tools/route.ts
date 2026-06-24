@@ -50,6 +50,8 @@ export async function POST(request: Request) {
     return NextResponse.json(tool, { status: 201 });
   } catch (error) {
     console.error("Failed to create tool:", error);
-    return NextResponse.json({ error: "Failed to create tool" }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Failed to create tool";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

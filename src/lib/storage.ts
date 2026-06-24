@@ -6,6 +6,7 @@ import seedTools from "../../data/tools.json";
 import { Tool } from "@/types/tool";
 
 const CATALOG_KEY = "tools-catalog";
+const STORE_NAME = "imsoorich-tools";
 
 function useNetlifyBlobs() {
   return process.env.NETLIFY === "true";
@@ -21,8 +22,23 @@ const FS_DATA_DIR = () => path.join(getFsRoot(), "data");
 const FS_UPLOADS_DIR = () => path.join(getFsRoot(), "uploads");
 const FS_TOOLS_FILE = () => path.join(FS_DATA_DIR(), "tools.json");
 
-async function getBlobStore() {
-  return getStore({ name: "imsoorich-tools", consistency: "strong" });
+function getBlobStore() {
+  const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+  const token =
+    process.env.NETLIFY_AUTH_TOKEN ||
+    process.env.NETLIFY_BLOBS_TOKEN ||
+    process.env.NETLIFY_API_TOKEN;
+
+  if (siteID && token) {
+    return getStore({
+      name: STORE_NAME,
+      siteID,
+      token,
+    });
+  }
+
+  // Uses NETLIFY_BLOBS_CONTEXT when running inside Netlify Functions
+  return getStore({ name: STORE_NAME });
 }
 
 function uploadKey(toolId: string, platform: string) {
@@ -32,7 +48,7 @@ function uploadKey(toolId: string, platform: string) {
 export async function readToolsCatalog(): Promise<Tool[]> {
   if (useNetlifyBlobs()) {
     try {
-      const store = await getBlobStore();
+      const store = getBlobStore();
       const data = await store.get(CATALOG_KEY, { type: "json" });
       if (Array.isArray(data)) return data as Tool[];
       if (data === null) {
@@ -41,6 +57,7 @@ export async function readToolsCatalog(): Promise<Tool[]> {
       }
     } catch (error) {
       console.error("Blob read failed:", error);
+      throw error;
     }
   }
 
@@ -60,7 +77,7 @@ export async function readToolsCatalog(): Promise<Tool[]> {
 
 export async function writeToolsCatalog(tools: Tool[]) {
   if (useNetlifyBlobs()) {
-    const store = await getBlobStore();
+    const store = getBlobStore();
     await store.setJSON(CATALOG_KEY, tools);
     return;
   }
@@ -80,7 +97,7 @@ export async function saveUploadFile(
   data: Buffer
 ) {
   if (useNetlifyBlobs()) {
-    const store = await getBlobStore();
+    const store = getBlobStore();
     const arrayBuffer = data.buffer.slice(
       data.byteOffset,
       data.byteOffset + data.byteLength
@@ -102,10 +119,10 @@ export async function readUploadFile(
 ): Promise<Buffer | null> {
   if (useNetlifyBlobs()) {
     try {
-      const store = await getBlobStore();
-      const data = await store.get(uploadKey(toolId, platform), { type: "blob" });
-      if (!data) return null;
-      const arrayBuffer = await data.arrayBuffer();
+      const store = getBlobStore();
+      const blob = await store.get(uploadKey(toolId, platform), { type: "blob" });
+      if (!blob) return null;
+      const arrayBuffer = await blob.arrayBuffer();
       return Buffer.from(arrayBuffer);
     } catch {
       return null;
@@ -126,7 +143,7 @@ export async function readUploadFile(
 export async function deleteToolFiles(toolId: string) {
   if (useNetlifyBlobs()) {
     try {
-      const store = await getBlobStore();
+      const store = getBlobStore();
       const { blobs } = await store.list({ prefix: `upload/${toolId}/` });
       await Promise.all(blobs.map((b) => store.delete(b.key)));
     } catch {
