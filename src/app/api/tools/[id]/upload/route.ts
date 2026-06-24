@@ -6,7 +6,7 @@ import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
 
 export async function POST(request: Request, { params }: RouteParams) {
   if (!(await isAdminAuthenticated())) {
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: "File too large. Maximum size is 50 MB." },
+        { error: "File too large. Maximum size is 200 MB." },
         { status: 413 }
       );
     }
