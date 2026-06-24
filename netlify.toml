@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  NETLIFY_SITE_ID = "c87cdd95-a81b-4f44-914f-42654600d160"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
