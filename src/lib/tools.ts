@@ -1,9 +1,26 @@
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
 import { Tool } from "@/types/tool";
+import seedTools from "../../data/tools.json";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+function isServerless() {
+  return Boolean(
+    process.env.NETLIFY ||
+      process.env.AWS_LAMBDA_FUNCTION_VERSION ||
+      process.env.VERCEL
+  );
+}
+
+function getStorageRoot() {
+  if (isServerless()) {
+    return path.join(os.tmpdir(), "imsoorich");
+  }
+  return process.cwd();
+}
+
+const DATA_DIR = path.join(getStorageRoot(), "data");
+const UPLOADS_DIR = path.join(getStorageRoot(), "uploads");
 const TOOLS_FILE = path.join(DATA_DIR, "tools.json");
 
 export async function ensureDirs() {
@@ -13,7 +30,11 @@ export async function ensureDirs() {
   try {
     await fs.access(TOOLS_FILE);
   } catch {
-    await fs.writeFile(TOOLS_FILE, "[]", "utf-8");
+    await fs.writeFile(
+      TOOLS_FILE,
+      JSON.stringify(seedTools, null, 2),
+      "utf-8"
+    );
   }
 }
 
@@ -23,8 +44,12 @@ export function getUploadsDir(toolId: string) {
 
 export async function readTools(): Promise<Tool[]> {
   await ensureDirs();
-  const raw = await fs.readFile(TOOLS_FILE, "utf-8");
-  return JSON.parse(raw) as Tool[];
+  try {
+    const raw = await fs.readFile(TOOLS_FILE, "utf-8");
+    return JSON.parse(raw) as Tool[];
+  } catch {
+    return seedTools as Tool[];
+  }
 }
 
 export async function writeTools(tools: Tool[]) {

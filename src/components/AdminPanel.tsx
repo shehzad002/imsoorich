@@ -26,10 +26,15 @@ export function AdminPanel() {
   });
 
   const fetchTools = useCallback(async () => {
-    const res = await fetch("/api/tools");
-    const data = await res.json();
-    setTools(data);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/tools");
+      const data = await res.json();
+      setTools(res.ok && Array.isArray(data) ? data : []);
+    } catch {
+      setTools([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
