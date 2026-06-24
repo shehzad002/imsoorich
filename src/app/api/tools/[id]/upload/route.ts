@@ -1,55 +1,65 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
-import { getToolById, getUploadsDir, saveTool, ensureDirs } from "@/lib/tools";
+import { getToolById, saveTool } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
+import { saveUploadFile, getUploadFilename } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
 type RouteParams = { params: Promise<{ id: string }> };
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 export async function POST(request: Request, { params }: RouteParams) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const tool = await getToolById(id);
-  if (!tool) {
-    return NextResponse.json({ error: "Tool not found" }, { status: 404 });
-  }
+  try {
+    const { id } = await params;
+    const tool = await getToolById(id);
+    if (!tool) {
+      return NextResponse.json({ error: "Tool not found" }, { status: 404 });
+    }
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File | null;
-  const platform = formData.get("platform") as string | null;
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const platform = formData.get("platform") as string | null;
 
-  if (!file || !platform || !isValidDownloadTarget(platform)) {
+    if (!file || !platform || !isValidDownloadTarget(platform)) {
+      return NextResponse.json(
+        {
+          error:
+            "File and valid platform required (windows-x64, windows-x86, linux, mac-intel, mac-arm)",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "File too large. Maximum size is 50 MB." },
+        { status: 413 }
+      );
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const filename = getUploadFilename(platform, file.name);
+
+    await saveUploadFile(id, platform, filename, buffer);
+
+    tool.downloads[platform as DownloadTarget] = {
+      filename,
+      size: buffer.length,
+      uploadedAt: new Date().toISOString(),
+    };
+    tool.updatedAt = new Date().toISOString();
+
+    await saveTool(tool);
+    return NextResponse.json(tool);
+  } catch (error) {
+    console.error("Upload error:", error);
     return NextResponse.json(
-      {
-        error:
-          "File and valid platform required (windows-x64, windows-x86, linux, mac-intel, mac-arm)",
-      },
-      { status: 400 }
+      { error: "Upload failed. Please try again." },
+      { status: 500 }
     );
   }
-
-  await ensureDirs();
-  const toolDir = getUploadsDir(id);
-  await fs.mkdir(toolDir, { recursive: true });
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const filename = `${platform}_${safeName}`;
-  const filePath = path.join(toolDir, filename);
-
-  await fs.writeFile(filePath, buffer);
-
-  tool.downloads[platform as DownloadTarget] = {
-    filename,
-    size: buffer.length,
-    uploadedAt: new Date().toISOString(),
-  };
-  tool.updatedAt = new Date().toISOString();
-
-  await saveTool(tool);
-  return NextResponse.json(tool);
 }

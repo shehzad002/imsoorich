@@ -1,17 +1,27 @@
 import { NextResponse } from "next/server";
-import { readTools, saveTool, generateId, ensureDirs } from "@/lib/tools";
+import { readTools, saveTool, generateId } from "@/lib/tools";
+import { isAdminAuthenticated } from "@/lib/auth";
 import { Tool } from "@/types/tool";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const tools = await readTools();
-    return NextResponse.json(tools);
-  } catch {
+    return NextResponse.json(tools, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("Failed to load tools:", error);
     return NextResponse.json({ error: "Failed to load tools" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  if (!(await isAdminAuthenticated())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name, description, version, tags, featured } = body;
@@ -23,7 +33,6 @@ export async function POST(request: Request) {
       );
     }
 
-    await ensureDirs();
     const now = new Date().toISOString();
     const tool: Tool = {
       id: generateId(),
@@ -39,7 +48,8 @@ export async function POST(request: Request) {
 
     await saveTool(tool);
     return NextResponse.json(tool, { status: 201 });
-  } catch {
+  } catch (error) {
+    console.error("Failed to create tool:", error);
     return NextResponse.json({ error: "Failed to create tool" }, { status: 500 });
   }
 }

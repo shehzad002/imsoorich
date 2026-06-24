@@ -9,6 +9,8 @@ import {
 } from "@/types/tool";
 import { PlatformIcon, formatBytes } from "@/components/PlatformIcon";
 
+const fetchOpts: RequestInit = { credentials: "include" };
+
 export function AdminPanel() {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
@@ -16,6 +18,9 @@ export function AdminPanel() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [creating, setCreating] = useState(false);
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     name: "",
@@ -25,9 +30,15 @@ export function AdminPanel() {
     featured: false,
   });
 
+  const showMessage = (text: string, type: "success" | "error" = "success") => {
+    setMessage(text);
+    setMessageType(type);
+    setTimeout(() => setMessage(""), 5000);
+  };
+
   const fetchTools = useCallback(async () => {
     try {
-      const res = await fetch("/api/tools");
+      const res = await fetch("/api/tools", { ...fetchOpts, cache: "no-store" });
       const data = await res.json();
       setTools(res.ok && Array.isArray(data) ? data : []);
     } catch {
@@ -47,10 +58,12 @@ export function AdminPanel() {
     const res = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ password }),
     });
     if (res.ok) {
       setAuthenticated(true);
+      fetchTools();
     } else {
       setAuthError("Wrong password. NGMI.");
     }
@@ -58,48 +71,72 @@ export function AdminPanel() {
 
   async function handleCreateTool(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch("/api/tools", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      }),
-    });
-    if (res.ok) {
-      setMessage("Tool created! 🚀");
-      setForm({ name: "", description: "", version: "1.0.0", tags: "", featured: false });
-      fetchTools();
-      setTimeout(() => setMessage(""), 3000);
+    setCreating(true);
+    try {
+      const res = await fetch("/api/tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          ...form,
+          tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showMessage("Tool created! 🚀 Check the homepage after refresh.");
+        setForm({ name: "", description: "", version: "1.0.0", tags: "", featured: false });
+        await fetchTools();
+      } else {
+        showMessage(data.error || "Failed to create tool.", "error");
+      }
+    } catch {
+      showMessage("Failed to create tool. Try again.", "error");
+    } finally {
+      setCreating(false);
     }
   }
 
   async function handleUpload(toolId: string, platform: DownloadTarget, file: File) {
+    const key = `${toolId}-${platform}`;
+    setUploading((prev) => ({ ...prev, [key]: true }));
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("platform", platform);
 
-    const res = await fetch(`/api/tools/${toolId}/upload`, {
-      method: "POST",
-      body: formData,
-    });
+    try {
+      const res = await fetch(`/api/tools/${toolId}/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
 
-    if (res.ok) {
-      setMessage(`${DOWNLOAD_SHORT[platform]} upload complete! ✅`);
-      fetchTools();
-      setTimeout(() => setMessage(""), 3000);
-    } else {
-      setMessage("Upload failed. Try again.");
+      if (res.ok) {
+        showMessage(`${DOWNLOAD_SHORT[platform]} uploaded! ✅ (${formatBytes(file.size)})`);
+        await fetchTools();
+      } else {
+        showMessage(data.error || "Upload failed. Try again.", "error");
+      }
+    } catch {
+      showMessage("Upload failed. Check your connection.", "error");
+    } finally {
+      setUploading((prev) => ({ ...prev, [key]: false }));
     }
   }
 
   async function handleDelete(toolId: string) {
     if (!confirm("Delete this tool and all its files?")) return;
-    const res = await fetch(`/api/tools/${toolId}`, { method: "DELETE" });
+    const res = await fetch(`/api/tools/${toolId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
     if (res.ok) {
-      setMessage("Tool deleted.");
-      fetchTools();
-      setTimeout(() => setMessage(""), 3000);
+      showMessage("Tool deleted.");
+      await fetchTools();
+    } else {
+      showMessage("Failed to delete tool.", "error");
     }
   }
 
@@ -150,13 +187,19 @@ export function AdminPanel() {
           </h1>
           <p className="mt-1 text-sm text-gray-500">Upload & manage your tools</p>
         </div>
-        <a href="/" className="btn-outline px-4 py-2 text-sm">
-          View Site
+        <a href="/" target="_blank" rel="noopener noreferrer" className="btn-outline px-4 py-2 text-sm">
+          View Site ↗
         </a>
       </div>
 
       {message && (
-        <div className="mb-6 rounded-lg border border-neon-green/30 bg-neon-green/10 px-4 py-3 font-mono text-sm text-neon-green">
+        <div
+          className={`mb-6 rounded-lg border px-4 py-3 font-mono text-sm ${
+            messageType === "success"
+              ? "border-neon-green/30 bg-neon-green/10 text-neon-green"
+              : "border-red-500/30 bg-red-500/10 text-red-400"
+          }`}
+        >
           {message}
         </div>
       )}
@@ -207,8 +250,8 @@ export function AdminPanel() {
           <span className="font-mono text-sm text-gray-400">Featured (Hot badge)</span>
         </label>
 
-        <button type="submit" className="btn-neon mt-4 px-6 py-2.5">
-          Create Tool
+        <button type="submit" disabled={creating} className="btn-neon mt-4 px-6 py-2.5 disabled:opacity-50">
+          {creating ? "Creating..." : "Create Tool"}
         </button>
       </form>
 
@@ -226,7 +269,14 @@ export function AdminPanel() {
             <div key={tool.id} className="rounded-2xl border border-white/8 bg-card p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-display text-lg font-bold text-white">{tool.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-lg font-bold text-white">{tool.name}</h3>
+                    {tool.featured && (
+                      <span className="hot-badge font-mono text-[9px] uppercase px-2 py-0.5">
+                        🔥 Hot
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500">{tool.description}</p>
                   <p className="mt-1 font-mono text-xs text-gray-600">
                     v{tool.version} · {tool.id}
@@ -249,6 +299,9 @@ export function AdminPanel() {
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {group.variants.map((platform) => {
                         const dl = tool.downloads[platform];
+                        const uploadKey = `${tool.id}-${platform}`;
+                        const isUploading = uploading[uploadKey];
+
                         return (
                           <div key={platform} className="rounded-lg border border-white/5 bg-black/30 p-3">
                             <div className="flex items-center gap-2 mb-2">
@@ -258,7 +311,11 @@ export function AdminPanel() {
                               </span>
                             </div>
 
-                            {dl ? (
+                            {isUploading ? (
+                              <p className="font-mono text-[10px] text-neon-gold mb-2 animate-pulse">
+                                ⏳ Uploading {formatBytes(0)}...
+                              </p>
+                            ) : dl ? (
                               <p className="font-mono text-[10px] text-neon-green mb-2 truncate">
                                 ✓ {dl.filename} ({formatBytes(dl.size)})
                               </p>
@@ -266,17 +323,19 @@ export function AdminPanel() {
                               <p className="font-mono text-[10px] text-gray-600 mb-2">No file uploaded</p>
                             )}
 
-                            <label className="block cursor-pointer">
+                            <label className={`block ${isUploading ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>
                               <input
                                 type="file"
                                 className="hidden"
+                                disabled={isUploading}
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) handleUpload(tool.id, platform, file);
+                                  e.target.value = "";
                                 }}
                               />
                               <span className="inline-block rounded-md border border-neon-green/20 bg-neon-green/5 px-3 py-1.5 font-mono text-[10px] text-neon-green hover:bg-neon-green/10 transition-colors">
-                                {dl ? "Replace" : "Upload"} File
+                                {isUploading ? "Uploading..." : dl ? "Replace" : "Upload"} File
                               </span>
                             </label>
                           </div>

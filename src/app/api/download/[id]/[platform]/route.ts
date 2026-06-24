@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
 import path from "path";
-import { getToolById, getUploadsDir } from "@/lib/tools";
+import { getToolById } from "@/lib/tools";
+import { readUploadFile } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
 type RouteParams = { params: Promise<{ id: string; platform: string }> };
@@ -27,30 +27,29 @@ export async function GET(_request: Request, { params }: RouteParams) {
     );
   }
 
-  const filePath = path.join(getUploadsDir(id), download.filename);
+  const buffer = await readUploadFile(id, platform);
 
-  try {
-    const buffer = await fs.readFile(filePath);
-    const ext = path.extname(download.filename).slice(1) || "bin";
-
-    const contentTypes: Record<string, string> = {
-      exe: "application/octet-stream",
-      zip: "application/zip",
-      tar: "application/x-tar",
-      gz: "application/gzip",
-      sh: "application/x-sh",
-      dmg: "application/x-apple-diskimage",
-      appimage: "application/octet-stream",
-    };
-
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type": contentTypes[ext] || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${download.filename}"`,
-        "Content-Length": buffer.length.toString(),
-      },
-    });
-  } catch {
+  if (!buffer) {
     return NextResponse.json({ error: "File not found on server" }, { status: 404 });
   }
+
+  const ext = path.extname(download.filename).slice(1) || "bin";
+
+  const contentTypes: Record<string, string> = {
+    exe: "application/octet-stream",
+    zip: "application/zip",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    sh: "application/x-sh",
+    dmg: "application/x-apple-diskimage",
+    appimage: "application/octet-stream",
+  };
+
+  return new NextResponse(new Uint8Array(buffer), {
+    headers: {
+      "Content-Type": contentTypes[ext] || "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${download.filename}"`,
+      "Content-Length": buffer.length.toString(),
+    },
+  });
 }
