@@ -11,6 +11,7 @@ export interface PlatformDownload {
   filename: string;
   size?: number;
   uploadedAt: string;
+  storagePath?: string;
 }
 
 export interface Tool {

@@ -1,88 +1,49 @@
-import { getStore } from "@netlify/blobs";
 import fs from "fs/promises";
 import path from "path";
-import seedTools from "../../data/tools.json";
-import { Tool } from "@/types/tool";
+import {
+  getSupabaseAdmin,
+  isSupabaseConfigured,
+  TOOL_FILES_BUCKET,
+} from "@/lib/supabase";
+import { DownloadTarget, PlatformDownload } from "@/types/tool";
 
-const CATALOG_KEY = "tools-catalog";
-const STORE_NAME = "imsoorich-tools";
-
-/** Local `next dev` only — everything else uses Netlify Blobs. */
-function useLocalFilesystem() {
-  return (
-    process.env.NODE_ENV === "development" &&
-    !process.env.AWS_LAMBDA_FUNCTION_NAME &&
-    !process.cwd().startsWith("/var/task")
-  );
-}
-
-function getBlobStore() {
-  const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
-  const token =
-    process.env.NETLIFY_AUTH_TOKEN ||
-    process.env.NETLIFY_BLOBS_TOKEN ||
-    process.env.NETLIFY_API_TOKEN;
-
-  if (siteID && token) {
-    return getStore({ name: STORE_NAME, siteID, token });
-  }
-
-  return getStore({ name: STORE_NAME });
-}
-
-function uploadKey(toolId: string, platform: string) {
-  return `upload/${toolId}/${platform}`;
-}
-
-const LOCAL_DATA_FILE = path.join(process.cwd(), "data", "tools.json");
 const LOCAL_UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
-async function readLocalCatalog(): Promise<Tool[]> {
-  try {
-    const raw = await fs.readFile(LOCAL_DATA_FILE, "utf-8");
-    return JSON.parse(raw) as Tool[];
-  } catch {
-    await fs.mkdir(path.dirname(LOCAL_DATA_FILE), { recursive: true });
-    await fs.writeFile(
-      LOCAL_DATA_FILE,
-      JSON.stringify(seedTools, null, 2),
-      "utf-8"
-    );
-    return seedTools as Tool[];
-  }
+function useLocalFilesystem() {
+  return !isSupabaseConfigured();
 }
 
-async function writeLocalCatalog(tools: Tool[]) {
-  await fs.mkdir(path.dirname(LOCAL_DATA_FILE), { recursive: true });
-  await fs.writeFile(LOCAL_DATA_FILE, JSON.stringify(tools, null, 2), "utf-8");
+export function getUploadFilename(platform: string, originalName: string) {
+  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `${platform}_${safeName}`;
 }
 
-export async function readToolsCatalog(): Promise<Tool[]> {
-  if (useLocalFilesystem()) {
-    return readLocalCatalog();
-  }
-
-  const store = getBlobStore();
-  const data = await store.get(CATALOG_KEY, { type: "json" });
-
-  if (Array.isArray(data)) return data as Tool[];
-
-  if (data === null) {
-    await store.setJSON(CATALOG_KEY, seedTools);
-    return seedTools as Tool[];
-  }
-
-  return seedTools as Tool[];
+export function getStoragePath(
+  toolId: string,
+  platform: DownloadTarget,
+  filename: string
+) {
+  return `${toolId}/${platform}/${filename}`;
 }
 
-export async function writeToolsCatalog(tools: Tool[]) {
-  if (useLocalFilesystem()) {
-    await writeLocalCatalog(tools);
-    return;
-  }
+export async function createSignedUploadUrl(storagePath: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .createSignedUploadUrl(storagePath);
 
-  const store = getBlobStore();
-  await store.setJSON(CATALOG_KEY, tools);
+  if (error) throw error;
+  return data;
+}
+
+export async function createSignedDownloadUrl(storagePath: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .createSignedUrl(storagePath, 3600);
+
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 export async function saveUploadFile(
@@ -98,20 +59,23 @@ export async function saveUploadFile(
     return;
   }
 
-  const store = getBlobStore();
-  const arrayBuffer = data.buffer.slice(
-    data.byteOffset,
-    data.byteOffset + data.byteLength
-  ) as ArrayBuffer;
+  const storagePath = getStoragePath(
+    toolId,
+    platform as DownloadTarget,
+    filename
+  );
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .upload(storagePath, data, { upsert: true });
 
-  await store.set(uploadKey(toolId, platform), arrayBuffer, {
-    metadata: { filename, platform, toolId },
-  });
+  if (error) throw error;
 }
 
 export async function readUploadFile(
   toolId: string,
-  platform: string
+  platform: string,
+  download?: PlatformDownload
 ): Promise<Buffer | null> {
   if (useLocalFilesystem()) {
     try {
@@ -125,13 +89,25 @@ export async function readUploadFile(
     }
   }
 
-  const store = getBlobStore();
-  const blob = await store.get(uploadKey(toolId, platform), { type: "blob" });
-  if (!blob) return null;
-  return Buffer.from(await blob.arrayBuffer());
+  const storagePath =
+    download?.storagePath ??
+    getStoragePath(toolId, platform as DownloadTarget, download?.filename ?? "");
+
+  if (!storagePath || storagePath.endsWith("/")) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) return null;
+  return Buffer.from(await data.arrayBuffer());
 }
 
-export async function deleteToolFiles(toolId: string) {
+export async function deleteToolFiles(
+  toolId: string,
+  downloads: Partial<Record<DownloadTarget, PlatformDownload>> = {}
+) {
   if (useLocalFilesystem()) {
     try {
       await fs.rm(path.join(LOCAL_UPLOADS_DIR, toolId), {
@@ -144,12 +120,30 @@ export async function deleteToolFiles(toolId: string) {
     return;
   }
 
-  const store = getBlobStore();
-  const { blobs } = await store.list({ prefix: `upload/${toolId}/` });
-  await Promise.all(blobs.map((b) => store.delete(b.key)));
-}
+  const supabase = getSupabaseAdmin();
+  const paths = Object.values(downloads)
+    .map((d) => d?.storagePath)
+    .filter((p): p is string => Boolean(p));
 
-export function getUploadFilename(platform: string, originalName: string) {
-  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  return `${platform}_${safeName}`;
+  if (paths.length > 0) {
+    await supabase.storage.from(TOOL_FILES_BUCKET).remove(paths);
+  }
+
+  const { data: listed } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .list(toolId, { limit: 1000 });
+
+  if (listed?.length) {
+    for (const platformFolder of listed) {
+      const { data: files } = await supabase.storage
+        .from(TOOL_FILES_BUCKET)
+        .list(`${toolId}/${platformFolder.name}`, { limit: 100 });
+
+      if (files?.length) {
+        await supabase.storage
+          .from(TOOL_FILES_BUCKET)
+          .remove(files.map((f) => `${toolId}/${platformFolder.name}/${f.name}`));
+      }
+    }
+  }
 }

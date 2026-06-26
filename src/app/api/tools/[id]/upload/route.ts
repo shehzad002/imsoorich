@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getToolById, saveTool } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { saveUploadFile, getUploadFilename } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
@@ -8,9 +9,20 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
 
+/** Local dev fallback — uploads through the server (not for Netlify production). */
 export async function POST(request: Request, { params }: RouteParams) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (isSupabaseConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Use direct upload via /upload-url when Supabase is configured.",
+      },
+      { status: 400 }
+    );
   }
 
   try {

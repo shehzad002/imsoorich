@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import {
   Tool,
   DownloadTarget,
@@ -8,8 +9,18 @@ import {
   PLATFORM_GROUPS,
 } from "@/types/tool";
 import { PlatformIcon, formatBytes } from "@/components/PlatformIcon";
+import { uploadWithProgress, progressPercent } from "@/lib/uploadWithProgress";
 
 const fetchOpts: RequestInit = { credentials: "include" };
+
+type UploadPhase = "preparing" | "uploading" | "finishing";
+
+type UploadProgress = {
+  phase: UploadPhase;
+  percent: number;
+  loaded: number;
+  total: number;
+};
 
 export function AdminPanel() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -20,7 +31,7 @@ export function AdminPanel() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [creating, setCreating] = useState(false);
-  const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
 
   const [form, setForm] = useState({
     name: "",
@@ -97,32 +108,128 @@ export function AdminPanel() {
     }
   }
 
+  function setProgress(key: string, update: UploadProgress | null) {
+    setUploadProgress((prev) => {
+      if (!update) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: update };
+    });
+  }
+
+  function reportProgress(key: string, update: UploadProgress) {
+    flushSync(() => setProgress(key, update));
+  }
+
   async function handleUpload(toolId: string, platform: DownloadTarget, file: File) {
     const key = `${toolId}-${platform}`;
-    setUploading((prev) => ({ ...prev, [key]: true }));
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("platform", platform);
+    reportProgress(key, {
+      phase: "preparing",
+      percent: 0,
+      loaded: 0,
+      total: file.size,
+    });
 
     try {
-      const res = await fetch(`/api/tools/${toolId}/upload`, {
+      const urlRes = await fetch(`/api/tools/${toolId}/upload-url`, {
         method: "POST",
         credentials: "include",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          filename: file.name,
+          size: file.size,
+        }),
       });
-      const data = await res.json();
+      const urlData = await urlRes.json();
 
-      if (res.ok) {
+      if (!urlRes.ok) {
+        showMessage(urlData.error || "Upload failed. Try again.", "error");
+        return;
+      }
+
+      if (urlData.mode === "direct") {
+        reportProgress(key, { phase: "uploading", percent: 0, loaded: 0, total: file.size });
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("platform", platform);
+
+        const res = await uploadWithProgress("POST", `/api/tools/${toolId}/upload`, formData, {
+          withCredentials: true,
+          totalSize: file.size,
+          onProgress: (loaded, total) => {
+            reportProgress(key, {
+              phase: "uploading",
+              percent: progressPercent(loaded, total),
+              loaded,
+              total,
+            });
+          },
+        });
+
+        if (res.ok) {
+          showMessage(`${DOWNLOAD_SHORT[platform]} uploaded! ✅ (${formatBytes(file.size)})`);
+          await fetchTools();
+        } else {
+          const data = res.data as { error?: string } | null;
+          showMessage(data?.error || "Upload failed. Try again.", "error");
+        }
+        return;
+      }
+
+      reportProgress(key, { phase: "uploading", percent: 0, loaded: 0, total: file.size });
+
+      const putRes = await uploadWithProgress(
+        "PUT",
+        urlData.signedUrl,
+        file,
+        {
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          totalSize: file.size,
+          onProgress: (loaded, total) => {
+            reportProgress(key, {
+              phase: "uploading",
+              percent: progressPercent(loaded, total),
+              loaded,
+              total,
+            });
+          },
+        }
+      );
+
+      if (!putRes.ok) {
+        showMessage("Upload to storage failed. Try again.", "error");
+        return;
+      }
+
+      reportProgress(key, { phase: "finishing", percent: 100, loaded: file.size, total: file.size });
+
+      const completeRes = await fetch(`/api/tools/${toolId}/upload-complete`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform,
+          storagePath: urlData.storagePath,
+          filename: urlData.filename,
+          size: file.size,
+        }),
+      });
+      const completeData = await completeRes.json();
+
+      if (completeRes.ok) {
         showMessage(`${DOWNLOAD_SHORT[platform]} uploaded! ✅ (${formatBytes(file.size)})`);
         await fetchTools();
       } else {
-        showMessage(data.error || "Upload failed. Try again.", "error");
+        showMessage(completeData.error || "Failed to save upload.", "error");
       }
     } catch {
       showMessage("Upload failed. Check your connection.", "error");
     } finally {
-      setUploading((prev) => ({ ...prev, [key]: false }));
+      setProgress(key, null);
     }
   }
 
@@ -300,7 +407,8 @@ export function AdminPanel() {
                       {group.variants.map((platform) => {
                         const dl = tool.downloads[platform];
                         const uploadKey = `${tool.id}-${platform}`;
-                        const isUploading = uploading[uploadKey];
+                        const progress = uploadProgress[uploadKey];
+                        const isUploading = Boolean(progress);
 
                         return (
                           <div key={platform} className="rounded-lg border border-white/5 bg-black/30 p-3">
@@ -311,10 +419,38 @@ export function AdminPanel() {
                               </span>
                             </div>
 
-                            {isUploading ? (
-                              <p className="font-mono text-[10px] text-neon-gold mb-2 animate-pulse">
-                                ⏳ Uploading {formatBytes(0)}...
-                              </p>
+                            {progress ? (
+                              <div className="mb-2">
+                                <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                                  <span className="font-display text-lg font-bold tabular-nums text-neon-green">
+                                    {progress.phase === "finishing"
+                                      ? "100%"
+                                      : progress.phase === "preparing"
+                                        ? "0%"
+                                        : `${progress.percent}%`}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-neon-gold">
+                                    {progress.phase === "preparing" && "Preparing…"}
+                                    {progress.phase === "uploading" &&
+                                      `${formatBytes(progress.loaded)} / ${formatBytes(progress.total)}`}
+                                    {progress.phase === "finishing" && "Saving…"}
+                                  </span>
+                                </div>
+                                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                                  <div
+                                    className="h-full rounded-full bg-neon-green transition-[width] duration-100 ease-out"
+                                    style={{
+                                      width: `${
+                                        progress.phase === "preparing"
+                                          ? 2
+                                          : progress.phase === "finishing"
+                                            ? 100
+                                            : Math.max(progress.percent, 1)
+                                      }%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
                             ) : dl ? (
                               <p className="font-mono text-[10px] text-neon-green mb-2 truncate">
                                 ✓ {dl.filename} ({formatBytes(dl.size)})
@@ -335,7 +471,11 @@ export function AdminPanel() {
                                 }}
                               />
                               <span className="inline-block rounded-md border border-neon-green/20 bg-neon-green/5 px-3 py-1.5 font-mono text-[10px] text-neon-green hover:bg-neon-green/10 transition-colors">
-                                {isUploading ? "Uploading..." : dl ? "Replace" : "Upload"} File
+                                {isUploading && progress
+                                  ? `${progress.percent}% uploading…`
+                                  : dl
+                                    ? "Replace File"
+                                    : "Upload File"}
                               </span>
                             </label>
                           </div>
