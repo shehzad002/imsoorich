@@ -35,7 +35,8 @@ export function uploadWithProgress(
     };
 
     xhr.onload = () => {
-      if (fallbackTotal > 0) {
+      const ok = xhr.status >= 200 && xhr.status < 300;
+      if (ok && fallbackTotal > 0) {
         options.onProgress(fallbackTotal, fallbackTotal);
       }
 
@@ -49,7 +50,7 @@ export function uploadWithProgress(
         }
       }
       resolve({
-        ok: xhr.status >= 200 && xhr.status < 300,
+        ok,
         status: xhr.status,
         data,
       });

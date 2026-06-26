@@ -19,4 +19,7 @@ insert into storage.buckets (id, name, public)
 values ('tool-files', 'tool-files', false)
 on conflict (id) do nothing;
 
+-- For files over 50 MB (up to 200 MB): Supabase Pro required.
+-- Dashboard → Storage → Settings → Global file size limit → 209715200 (200 MB)
+
 -- Service role bypasses RLS; no public policies needed for server-side access.

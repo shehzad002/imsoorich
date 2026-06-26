@@ -30,10 +30,25 @@ export async function createSignedUploadUrl(storagePath: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.storage
     .from(TOOL_FILES_BUCKET)
-    .createSignedUploadUrl(storagePath);
+    .createSignedUploadUrl(storagePath, { upsert: true });
 
   if (error) throw error;
   return data;
+}
+
+export async function storageObjectExists(storagePath: string) {
+  const supabase = getSupabaseAdmin();
+  const parts = storagePath.split("/");
+  const filename = parts.pop();
+  const folder = parts.join("/");
+  if (!filename) return false;
+
+  const { data, error } = await supabase.storage
+    .from(TOOL_FILES_BUCKET)
+    .list(folder, { search: filename, limit: 1 });
+
+  if (error) return false;
+  return Boolean(data?.some((f) => f.name === filename));
 }
 
 export async function createSignedDownloadUrl(storagePath: string) {

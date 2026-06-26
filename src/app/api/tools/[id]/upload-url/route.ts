@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { getToolById } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import {
+  getSupabaseTusEndpoint,
+  isSupabaseConfigured,
+  SUPABASE_FREE_MAX_BYTES,
+  TOOL_FILES_BUCKET,
+  TUS_UPLOAD_THRESHOLD,
+} from "@/lib/supabase";
 import {
   createSignedUploadUrl,
   getStoragePath,
@@ -52,12 +58,23 @@ export async function POST(request: Request, { params }: RouteParams) {
     const safeFilename = getUploadFilename(platform, filename);
     const storagePath = getStoragePath(id, platform, safeFilename);
     const signed = await createSignedUploadUrl(storagePath);
+    const storagePathFinal = signed.path ?? storagePath;
+    const useTus = typeof size === "number" && size > TUS_UPLOAD_THRESHOLD;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
     return NextResponse.json({
-      mode: "supabase",
+      mode: useTus ? "supabase-tus" : "supabase",
       signedUrl: signed.signedUrl,
-      storagePath: signed.path ?? storagePath,
+      token: signed.token,
+      storagePath: storagePathFinal,
       filename: safeFilename,
+      bucket: TOOL_FILES_BUCKET,
+      tusEndpoint: getSupabaseTusEndpoint(supabaseUrl),
+      sizeWarning:
+        typeof size === "number" && size > SUPABASE_FREE_MAX_BYTES
+          ? "Files over 50 MB require Supabase Pro and a higher global file size limit in Storage settings."
+          : undefined,
     });
   } catch (error) {
     console.error("Upload URL error:", error);

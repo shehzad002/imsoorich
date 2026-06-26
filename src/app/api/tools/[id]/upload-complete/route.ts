@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getToolById, saveTool } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { storageObjectExists } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -40,6 +41,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    const exists = await storageObjectExists(storagePath);
+    if (!exists) {
+      return NextResponse.json(
+        {
+          error:
+            "File not found in storage after upload. If the file is over 50 MB, upgrade Supabase to Pro and raise the global file size limit in Storage settings.",
+        },
+        { status: 400 }
+      );
+    }
+
     tool.downloads[platform as DownloadTarget] = {
       filename,
       size: typeof size === "number" ? size : undefined,
@@ -52,9 +64,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json(tool);
   } catch (error) {
     console.error("Upload complete error:", error);
-    return NextResponse.json(
-      { error: "Failed to save upload metadata" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Failed to save upload metadata";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
