@@ -10,7 +10,6 @@ import {
 } from "@/types/tool";
 import { PlatformIcon, formatBytes } from "@/components/PlatformIcon";
 import { uploadWithProgress, progressPercent } from "@/lib/uploadWithProgress";
-import { tusUploadWithProgress } from "@/lib/tusUpload";
 
 const fetchOpts: RequestInit = { credentials: "include" };
 
@@ -142,6 +141,7 @@ export function AdminPanel() {
           platform,
           filename: file.name,
           size: file.size,
+          contentType: file.type || undefined,
         }),
       });
       const urlData = await urlRes.json();
@@ -181,76 +181,39 @@ export function AdminPanel() {
         return;
       }
 
-      if (urlData.sizeWarning) {
-        showMessage(urlData.sizeWarning, "error");
-      }
-
       reportProgress(key, { phase: "uploading", percent: 0, loaded: 0, total: file.size });
 
-      if (urlData.mode === "supabase-tus") {
-        try {
-          await tusUploadWithProgress({
-            file,
-            endpoint: urlData.tusEndpoint,
-            token: urlData.token,
-            bucket: urlData.bucket,
-            objectName: urlData.storagePath,
-            onProgress: (loaded, total) => {
-              reportProgress(key, {
-                phase: "uploading",
-                percent: progressPercent(loaded, total),
-                loaded,
-                total,
-              });
-            },
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Upload failed";
-          const isSizeLimit =
-            msg.includes("413") ||
-            msg.toLowerCase().includes("too large") ||
-            msg.toLowerCase().includes("maximum");
-          showMessage(
-            isSizeLimit
-              ? "File too large for your Supabase plan. Free max is 50 MB — upgrade to Pro and set Storage global limit to 200 MB."
-              : `Upload failed: ${msg}`,
-            "error"
-          );
-          return;
+      const putRes = await uploadWithProgress(
+        "PUT",
+        urlData.signedUrl,
+        file,
+        {
+          headers: {
+            "Content-Type": urlData.contentType || file.type || "application/octet-stream",
+          },
+          totalSize: file.size,
+          onProgress: (loaded, total) => {
+            reportProgress(key, {
+              phase: "uploading",
+              percent: progressPercent(loaded, total),
+              loaded,
+              total,
+            });
+          },
         }
-      } else {
-        const putRes = await uploadWithProgress(
-          "PUT",
-          urlData.signedUrl,
-          file,
-          {
-            headers: { "Content-Type": file.type || "application/octet-stream" },
-            totalSize: file.size,
-            onProgress: (loaded, total) => {
-              reportProgress(key, {
-                phase: "uploading",
-                percent: progressPercent(loaded, total),
-                loaded,
-                total,
-              });
-            },
-          }
-        );
+      );
 
-        if (!putRes.ok) {
-          const detail =
-            typeof putRes.data === "string"
-              ? putRes.data
-              : (putRes.data as { message?: string; error?: string } | null)?.message ||
-                (putRes.data as { error?: string } | null)?.error;
-          showMessage(
-            putRes.status === 413 || detail?.toLowerCase().includes("too large")
-              ? "File too large for your Supabase plan. Free max is 50 MB — upgrade to Pro and set Storage global limit to 200 MB."
-              : detail || `Upload to storage failed (HTTP ${putRes.status}).`,
-            "error"
-          );
-          return;
-        }
+      if (!putRes.ok) {
+        const detail =
+          typeof putRes.data === "string"
+            ? putRes.data
+            : (putRes.data as { message?: string; error?: string } | null)?.message ||
+              (putRes.data as { error?: string } | null)?.error;
+        showMessage(
+          detail || `Upload to storage failed (HTTP ${putRes.status}). Check R2 CORS settings.`,
+          "error"
+        );
+        return;
       }
 
       reportProgress(key, { phase: "finishing", percent: 100, loaded: file.size, total: file.size });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getToolById, saveTool } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import { storageObjectExists } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
@@ -12,9 +12,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     return NextResponse.json(
-      { error: "Direct upload complete is only used with Supabase" },
+      { error: "Upload complete is only used with Cloudflare R2" },
       { status: 400 }
     );
   }
@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json(
         {
           error:
-            "File not found in storage after upload. If the file is over 50 MB, upgrade Supabase to Pro and raise the global file size limit in Storage settings.",
+            "File not found in R2 after upload. Check R2 CORS allows PUT from your site domain.",
         },
         { status: 400 }
       );

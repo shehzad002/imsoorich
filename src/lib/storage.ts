@@ -1,16 +1,21 @@
 import fs from "fs/promises";
 import path from "path";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import {
-  getSupabaseAdmin,
-  isSupabaseConfigured,
-  TOOL_FILES_BUCKET,
-} from "@/lib/supabase";
+  createR2DownloadUrl,
+  createR2UploadUrl,
+  deleteR2Objects,
+  deleteR2Prefix,
+  downloadFromR2,
+  r2ObjectExists,
+  uploadToR2,
+} from "@/lib/cloudflare/r2";
 import { DownloadTarget, PlatformDownload } from "@/types/tool";
 
 const LOCAL_UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 function useLocalFilesystem() {
-  return !isSupabaseConfigured();
+  return !isCloudflareConfigured();
 }
 
 export function getUploadFilename(platform: string, originalName: string) {
@@ -26,39 +31,21 @@ export function getStoragePath(
   return `${toolId}/${platform}/${filename}`;
 }
 
-export async function createSignedUploadUrl(storagePath: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .createSignedUploadUrl(storagePath, { upsert: true });
-
-  if (error) throw error;
-  return data;
+export async function createPresignedUploadUrl(
+  storagePath: string,
+  contentType: string
+) {
+  const signedUrl = await createR2UploadUrl(storagePath, contentType);
+  return { signedUrl, storagePath };
 }
 
 export async function storageObjectExists(storagePath: string) {
-  const supabase = getSupabaseAdmin();
-  const parts = storagePath.split("/");
-  const filename = parts.pop();
-  const folder = parts.join("/");
-  if (!filename) return false;
-
-  const { data, error } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .list(folder, { search: filename, limit: 1 });
-
-  if (error) return false;
-  return Boolean(data?.some((f) => f.name === filename));
+  if (useLocalFilesystem()) return false;
+  return r2ObjectExists(storagePath);
 }
 
 export async function createSignedDownloadUrl(storagePath: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .createSignedUrl(storagePath, 3600);
-
-  if (error) throw error;
-  return data.signedUrl;
+  return createR2DownloadUrl(storagePath);
 }
 
 export async function saveUploadFile(
@@ -79,12 +66,7 @@ export async function saveUploadFile(
     platform as DownloadTarget,
     filename
   );
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .upload(storagePath, data, { upsert: true });
-
-  if (error) throw error;
+  await uploadToR2(storagePath, data, "application/octet-stream");
 }
 
 export async function readUploadFile(
@@ -109,14 +91,7 @@ export async function readUploadFile(
     getStoragePath(toolId, platform as DownloadTarget, download?.filename ?? "");
 
   if (!storagePath || storagePath.endsWith("/")) return null;
-
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .download(storagePath);
-
-  if (error || !data) return null;
-  return Buffer.from(await data.arrayBuffer());
+  return downloadFromR2(storagePath);
 }
 
 export async function deleteToolFiles(
@@ -135,30 +110,13 @@ export async function deleteToolFiles(
     return;
   }
 
-  const supabase = getSupabaseAdmin();
   const paths = Object.values(downloads)
     .map((d) => d?.storagePath)
     .filter((p): p is string => Boolean(p));
 
-  if (paths.length > 0) {
-    await supabase.storage.from(TOOL_FILES_BUCKET).remove(paths);
+  if (paths.length) {
+    await deleteR2Objects(paths);
   }
 
-  const { data: listed } = await supabase.storage
-    .from(TOOL_FILES_BUCKET)
-    .list(toolId, { limit: 1000 });
-
-  if (listed?.length) {
-    for (const platformFolder of listed) {
-      const { data: files } = await supabase.storage
-        .from(TOOL_FILES_BUCKET)
-        .list(`${toolId}/${platformFolder.name}`, { limit: 100 });
-
-      if (files?.length) {
-        await supabase.storage
-          .from(TOOL_FILES_BUCKET)
-          .remove(files.map((f) => `${toolId}/${platformFolder.name}/${f.name}`));
-      }
-    }
-  }
+  await deleteR2Prefix(`${toolId}/`);
 }

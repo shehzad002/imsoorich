@@ -1,5 +1,6 @@
 import { Tool } from "@/types/tool";
-import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
+import { d1Execute, d1Query } from "@/lib/cloudflare/d1";
 import { deleteToolFiles } from "@/lib/storage";
 import fs from "fs/promises";
 import path from "path";
@@ -12,9 +13,9 @@ type ToolRow = {
   name: string;
   description: string;
   version: string;
-  featured: boolean;
-  tags: string[];
-  downloads: Tool["downloads"];
+  featured: number;
+  tags: string;
+  downloads: string;
   created_at: string;
   updated_at: string;
 };
@@ -25,27 +26,11 @@ function rowToTool(row: ToolRow): Tool {
     name: row.name,
     description: row.description,
     version: row.version,
-    featured: row.featured,
-    tags: row.tags ?? [],
-    downloads: row.downloads ?? {},
+    featured: Boolean(row.featured),
+    tags: JSON.parse(row.tags || "[]") as string[],
+    downloads: JSON.parse(row.downloads || "{}") as Tool["downloads"],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-function toolToRow(tool: Tool): Omit<ToolRow, "created_at"> & {
-  created_at: string;
-} {
-  return {
-    id: tool.id,
-    name: tool.name,
-    description: tool.description,
-    version: tool.version,
-    featured: tool.featured,
-    tags: tool.tags,
-    downloads: tool.downloads,
-    created_at: tool.createdAt,
-    updated_at: tool.updatedAt,
   };
 }
 
@@ -70,39 +55,30 @@ async function writeLocalCatalog(tools: Tool[]) {
 }
 
 export async function readTools(): Promise<Tool[]> {
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     return readLocalCatalog();
   }
 
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("tools")
-    .select("*")
-    .order("updated_at", { ascending: false });
-
-  if (error) throw error;
-  return (data as ToolRow[]).map(rowToTool);
+  const rows = await d1Query<ToolRow>(
+    "SELECT * FROM tools ORDER BY updated_at DESC"
+  );
+  return rows.map(rowToTool);
 }
 
 export async function getToolById(id: string): Promise<Tool | undefined> {
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     const tools = await readLocalCatalog();
     return tools.find((t) => t.id === id);
   }
 
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("tools")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data ? rowToTool(data as ToolRow) : undefined;
+  const rows = await d1Query<ToolRow>("SELECT * FROM tools WHERE id = ? LIMIT 1", [
+    id,
+  ]);
+  return rows[0] ? rowToTool(rows[0]) : undefined;
 }
 
 export async function saveTool(tool: Tool) {
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     const tools = await readLocalCatalog();
     const index = tools.findIndex((t) => t.id === tool.id);
     if (index >= 0) {
@@ -114,23 +90,41 @@ export async function saveTool(tool: Tool) {
     return tool;
   }
 
-  const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("tools").upsert(toolToRow(tool));
+  await d1Execute(
+    `INSERT INTO tools (id, name, description, version, featured, tags, downloads, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       description = excluded.description,
+       version = excluded.version,
+       featured = excluded.featured,
+       tags = excluded.tags,
+       downloads = excluded.downloads,
+       updated_at = excluded.updated_at`,
+    [
+      tool.id,
+      tool.name,
+      tool.description,
+      tool.version,
+      tool.featured ? 1 : 0,
+      JSON.stringify(tool.tags),
+      JSON.stringify(tool.downloads),
+      tool.createdAt,
+      tool.updatedAt,
+    ]
+  );
 
-  if (error) throw error;
   return tool;
 }
 
 export async function deleteTool(id: string) {
   const tool = await getToolById(id);
 
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     const tools = await readLocalCatalog();
     await writeLocalCatalog(tools.filter((t) => t.id !== id));
   } else {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("tools").delete().eq("id", id);
-    if (error) throw error;
+    await d1Execute("DELETE FROM tools WHERE id = ?", [id]);
   }
 
   await deleteToolFiles(id, tool?.downloads ?? {});
@@ -141,7 +135,7 @@ export function generateId() {
 }
 
 export async function ensureDirs() {
-  /* no-op — Supabase handles persistence */
+  /* no-op */
 }
 
 export function getUploadsDir(_toolId: string) {

@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import path from "path";
 import { getToolById } from "@/lib/tools";
-import {
-  createSignedDownloadUrl,
-  readUploadFile,
-} from "@/lib/storage";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { createSignedDownloadUrl, readUploadFile } from "@/lib/storage";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
 type RouteParams = { params: Promise<{ id: string; platform: string }> };
@@ -31,7 +28,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     );
   }
 
-  if (isSupabaseConfigured() && download.storagePath) {
+  if (isCloudflareConfigured() && download.storagePath) {
     try {
       const signedUrl = await createSignedDownloadUrl(download.storagePath);
       return NextResponse.redirect(signedUrl, 302);

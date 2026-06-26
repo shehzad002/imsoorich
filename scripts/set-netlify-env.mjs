@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Set Supabase + admin env vars on Netlify.
+ * Set Cloudflare + admin env vars on Netlify.
  * Usage: NETLIFY_AUTH_TOKEN=your_token node scripts/set-netlify-env.mjs
  */
 import fs from "fs";
@@ -24,13 +24,17 @@ function parseEnvFile(filePath) {
 
 const KEYS = [
   "ADMIN_PASSWORD",
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
+  "CLOUDFLARE_ACCOUNT_ID",
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_D1_DATABASE_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET_NAME",
 ];
 
 async function getExistingEnv(token) {
   const res = await fetch(
-    `https://api.netlify.com/api/v1/sites/${SITE_ID}/env`,
+    `https://api.netlify.com/client/v4/sites/${SITE_ID}/env`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) {
@@ -41,7 +45,7 @@ async function getExistingEnv(token) {
 
 async function upsertEnv(token, key, value) {
   const res = await fetch(
-    `https://api.netlify.com/api/v1/sites/${SITE_ID}/env/${encodeURIComponent(key)}`,
+    `https://api.netlify.com/client/v4/sites/${SITE_ID}/env/${encodeURIComponent(key)}`,
     {
       method: "PUT",
       headers: {

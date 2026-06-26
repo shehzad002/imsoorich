@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getToolById, saveTool } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import { saveUploadFile, getUploadFilename } from "@/lib/storage";
 import { DownloadTarget, isValidDownloadTarget } from "@/types/tool";
 
@@ -15,11 +15,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (isSupabaseConfigured()) {
+  if (isCloudflareConfigured()) {
     return NextResponse.json(
       {
-        error:
-          "Use direct upload via /upload-url when Supabase is configured.",
+        error: "Use direct upload via /upload-url when Cloudflare R2 is configured.",
       },
       { status: 400 }
     );

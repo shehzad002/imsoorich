@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://imsoorich.fun",
+      "https://imsoorich-tools.netlify.app",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

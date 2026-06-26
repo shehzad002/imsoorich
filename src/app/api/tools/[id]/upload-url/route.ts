@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 import { getToolById } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
+import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import {
-  getSupabaseTusEndpoint,
-  isSupabaseConfigured,
-  SUPABASE_FREE_MAX_BYTES,
-  TOOL_FILES_BUCKET,
-  TUS_UPLOAD_THRESHOLD,
-} from "@/lib/supabase";
-import {
-  createSignedUploadUrl,
+  createPresignedUploadUrl,
   getStoragePath,
   getUploadFilename,
 } from "@/lib/storage";
@@ -19,12 +13,25 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
 
+function guessContentType(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    zip: "application/zip",
+    exe: "application/octet-stream",
+    dmg: "application/x-apple-diskimage",
+    sh: "application/x-sh",
+    gz: "application/gzip",
+    tar: "application/x-tar",
+  };
+  return types[ext ?? ""] || "application/octet-stream";
+}
+
 export async function POST(request: Request, { params }: RouteParams) {
   if (!(await isAdminAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!isSupabaseConfigured()) {
+  if (!isCloudflareConfigured()) {
     return NextResponse.json({ mode: "direct" });
   }
 
@@ -36,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json();
-    const { platform, filename, size } = body;
+    const { platform, filename, size, contentType } = body;
 
     if (!filename || !platform || !isValidDownloadTarget(platform)) {
       return NextResponse.json(
@@ -57,29 +64,20 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const safeFilename = getUploadFilename(platform, filename);
     const storagePath = getStoragePath(id, platform, safeFilename);
-    const signed = await createSignedUploadUrl(storagePath);
-    const storagePathFinal = signed.path ?? storagePath;
-    const useTus = typeof size === "number" && size > TUS_UPLOAD_THRESHOLD;
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const mime = contentType || guessContentType(filename);
+    const signed = await createPresignedUploadUrl(storagePath, mime);
 
     return NextResponse.json({
-      mode: useTus ? "supabase-tus" : "supabase",
+      mode: "r2",
       signedUrl: signed.signedUrl,
-      token: signed.token,
-      storagePath: storagePathFinal,
+      storagePath: signed.storagePath,
       filename: safeFilename,
-      bucket: TOOL_FILES_BUCKET,
-      tusEndpoint: getSupabaseTusEndpoint(supabaseUrl),
-      sizeWarning:
-        typeof size === "number" && size > SUPABASE_FREE_MAX_BYTES
-          ? "Files over 50 MB require Supabase Pro and a higher global file size limit in Storage settings."
-          : undefined,
+      contentType: mime,
     });
   } catch (error) {
     console.error("Upload URL error:", error);
     return NextResponse.json(
-      { error: "Failed to prepare upload. Check Supabase Storage setup." },
+      { error: "Failed to prepare upload. Check Cloudflare R2 setup." },
       { status: 500 }
     );
   }

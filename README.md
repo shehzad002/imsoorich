@@ -7,44 +7,59 @@ Crypto tools download hub — bundlers, volume bots, snipers, and more. Cross-pl
 ```bash
 npm install
 cp .env.example .env.local
-# Edit .env.local — set ADMIN_PASSWORD and Supabase keys
+# Edit .env.local — set ADMIN_PASSWORD and Cloudflare keys (or skip for local disk dev)
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
 
-Without Supabase env vars, local dev uses `data/tools.json` and `uploads/` on disk. For Netlify production, Supabase is required.
+Without Cloudflare env vars, local dev uses `data/tools.json` and `uploads/` on disk.
 
-## Supabase Setup
+## Cloudflare Setup (R2 + D1)
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. In **SQL Editor**, run the contents of [`supabase/schema.sql`](supabase/schema.sql)
-3. In **Project Settings → API**, copy:
-   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (server only — never expose in client code)
-4. Confirm the **tool-files** storage bucket exists (Dashboard → Storage)
+Free tier supports **200 MB per file** (and much larger) — no Supabase-style 50 MB cap.
 
-### Netlify env vars
+### 1. D1 database (tool catalog)
 
-Add these in **Site settings → Environment variables**:
+```bash
+npx wrangler d1 create imsoorich-tools
+npx wrangler d1 execute imsoorich-tools --remote --file=cloudflare/d1-schema.sql
+```
+
+Copy the **database ID** → `CLOUDFLARE_D1_DATABASE_ID`
+
+### 2. R2 bucket (tool files)
+
+1. Cloudflare Dashboard → **R2** → Create bucket `imsoorich-tools`
+2. **Settings → CORS** → paste [`cloudflare/r2-cors.json`](cloudflare/r2-cors.json)
+3. **Manage R2 API tokens** → Create token with read/write on the bucket
+4. Copy **Access Key ID** and **Secret** → `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+
+### 3. API token for D1
+
+Cloudflare Dashboard → **My Profile → API Tokens** → Create token with **D1 Edit** permission.
+
+Copy **Account ID** → `CLOUDFLARE_ACCOUNT_ID`
+
+### 4. Netlify env vars
 
 | Variable | Value |
 |----------|--------|
 | `ADMIN_PASSWORD` | Your admin password |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+| `CLOUDFLARE_API_TOKEN` | API token with D1 edit |
+| `CLOUDFLARE_D1_DATABASE_ID` | D1 database UUID |
+| `R2_ACCESS_KEY_ID` | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | R2 secret key |
+| `R2_BUCKET_NAME` | `imsoorich-tools` |
 
-Uploads go **directly from the browser to Supabase Storage** (signed URLs), so large files (up to 200 MB) work on Netlify without hitting the 6 MB function body limit.
+Uploads go **directly from the browser to R2** (presigned URLs), so 200 MB files work on Netlify.
+
+Run `npm run netlify:env` with `NETLIFY_AUTH_TOKEN` set to push all vars from `.env.local`.
 
 ## Admin Panel
 
-Go to [http://localhost:3000/admin](http://localhost:3000/admin) to:
-
-- Create new tools (name, description, version, tags)
-- Upload platform-specific files (Windows `.exe`/`.zip`, Linux `.sh`/`.AppImage`, macOS `.dmg`)
-- Delete tools
-
-Default admin password: `shiso2024` (change it in `.env.local`)
+Go to [http://localhost:3000/admin](http://localhost:3000/admin) to create tools and upload platform files.
 
 ## Support
 
@@ -52,18 +67,9 @@ Telegram: [https://t.me/shiso02](https://t.me/shiso02)
 
 ## Deploy
 
-Recommended: **Netlify** with Supabase for catalog + file storage.
+**Netlify** + Cloudflare R2/D1 (recommended):
 
 ```bash
 npm run build
 npm start
 ```
-
-## Structure
-
-- `src/app/page.tsx` — Main landing page
-- `src/app/admin/` — Admin upload panel
-- `src/app/api/` — Tools CRUD, signed upload/download
-- `src/lib/supabase.ts` — Supabase admin client
-- `src/lib/tools.ts` — Tool catalog (Postgres or local JSON)
-- `supabase/schema.sql` — Database + storage bucket setup
