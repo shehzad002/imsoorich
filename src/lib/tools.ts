@@ -1,4 +1,4 @@
-import { Tool } from "@/types/tool";
+import { Tool, ToolStatus } from "@/types/tool";
 import { isCloudflareConfigured } from "@/lib/cloudflare/config";
 import { d1Execute, d1Query } from "@/lib/cloudflare/d1";
 import { deleteToolFiles } from "@/lib/storage";
@@ -14,6 +14,7 @@ type ToolRow = {
   description: string;
   version: string;
   featured: number;
+  status?: string;
   tags: string;
   downloads: string;
   created_at: string;
@@ -27,6 +28,7 @@ function rowToTool(row: ToolRow): Tool {
     description: row.description,
     version: row.version,
     featured: Boolean(row.featured),
+    status: (row.status as ToolStatus) || "available",
     tags: JSON.parse(row.tags || "[]") as string[],
     downloads: JSON.parse(row.downloads || "{}") as Tool["downloads"],
     createdAt: row.created_at,
@@ -34,10 +36,14 @@ function rowToTool(row: ToolRow): Tool {
   };
 }
 
+function normalizeTool(tool: Tool): Tool {
+  return { ...tool, status: tool.status || "available" };
+}
+
 async function readLocalCatalog(): Promise<Tool[]> {
   try {
     const raw = await fs.readFile(LOCAL_DATA_FILE, "utf-8");
-    return JSON.parse(raw) as Tool[];
+    return (JSON.parse(raw) as Tool[]).map(normalizeTool);
   } catch {
     await fs.mkdir(path.dirname(LOCAL_DATA_FILE), { recursive: true });
     await fs.writeFile(
@@ -91,13 +97,14 @@ export async function saveTool(tool: Tool) {
   }
 
   await d1Execute(
-    `INSERT INTO tools (id, name, description, version, featured, tags, downloads, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO tools (id, name, description, version, featured, status, tags, downloads, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        description = excluded.description,
        version = excluded.version,
        featured = excluded.featured,
+       status = excluded.status,
        tags = excluded.tags,
        downloads = excluded.downloads,
        updated_at = excluded.updated_at`,
@@ -107,6 +114,7 @@ export async function saveTool(tool: Tool) {
       tool.description,
       tool.version,
       tool.featured ? 1 : 0,
+      tool.status || "available",
       JSON.stringify(tool.tags),
       JSON.stringify(tool.downloads),
       tool.createdAt,

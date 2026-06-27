@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readTools, saveTool, generateId } from "@/lib/tools";
 import { isAdminAuthenticated } from "@/lib/auth";
-import { Tool } from "@/types/tool";
+import { Tool, isValidToolStatus } from "@/types/tool";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, description, version, tags, featured } = body;
+    const { name, description, version, tags, featured, status } = body;
 
     if (!name || !description) {
       return NextResponse.json(
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       description,
       version: version || "1.0.0",
       featured: featured ?? false,
+      status: typeof status === "string" && isValidToolStatus(status) ? status : "available",
       tags: tags || [],
       downloads: {},
       createdAt: now,

@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import {
   Tool,
+  ToolRequest,
+  ToolStatus,
   DownloadTarget,
   DOWNLOAD_SHORT,
   PLATFORM_GROUPS,
@@ -32,6 +34,7 @@ export function AdminPanel() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [creating, setCreating] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, UploadProgress>>({});
+  const [requests, setRequests] = useState<ToolRequest[]>([]);
 
   const [form, setForm] = useState({
     name: "",
@@ -39,6 +42,7 @@ export function AdminPanel() {
     version: "1.0.0",
     tags: "",
     featured: false,
+    status: "available" as ToolStatus,
   });
 
   const showMessage = (text: string, type: "success" | "error" = "success") => {
@@ -59,6 +63,16 @@ export function AdminPanel() {
     }
   }, []);
 
+  const fetchRequests = useCallback(async () => {
+    try {
+      const res = await fetch("/api/requests", { ...fetchOpts, cache: "no-store" });
+      const data = await res.json();
+      setRequests(res.ok && Array.isArray(data) ? data : []);
+    } catch {
+      setRequests([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchTools();
   }, [fetchTools]);
@@ -75,6 +89,7 @@ export function AdminPanel() {
     if (res.ok) {
       setAuthenticated(true);
       fetchTools();
+      fetchRequests();
     } else {
       setAuthError("Wrong password. NGMI.");
     }
@@ -95,8 +110,19 @@ export function AdminPanel() {
       });
       const data = await res.json();
       if (res.ok) {
-        showMessage("Tool created! 🚀 Refresh the homepage to see it.");
-        setForm({ name: "", description: "", version: "1.0.0", tags: "", featured: false });
+        showMessage(
+          form.status === "upcoming"
+            ? "Upcoming tool added! 🔮 It shows in the Upcoming category."
+            : "Tool created! 🚀 Refresh the homepage to see it."
+        );
+        setForm({
+          name: "",
+          description: "",
+          version: "1.0.0",
+          tags: "",
+          featured: false,
+          status: "available",
+        });
         await fetchTools();
       } else {
         showMessage(data.error || "Failed to create tool.", "error");
@@ -105,6 +131,42 @@ export function AdminPanel() {
       showMessage("Failed to create tool. Try again.", "error");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleRequestAction(
+    requestId: string,
+    action: "accept" | "reject"
+  ) {
+    const res = await fetch(`/api/requests/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ action }),
+    });
+    if (res.ok) {
+      showMessage(
+        action === "accept"
+          ? "Request accepted → added to Upcoming. ✅"
+          : "Request rejected."
+      );
+      await Promise.all([fetchRequests(), fetchTools()]);
+    } else {
+      showMessage("Failed to update request.", "error");
+    }
+  }
+
+  async function handleRequestDelete(requestId: string) {
+    if (!confirm("Delete this request permanently?")) return;
+    const res = await fetch(`/api/requests/${requestId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      showMessage("Request deleted.");
+      await fetchRequests();
+    } else {
+      showMessage("Failed to delete request.", "error");
     }
   }
 
@@ -358,20 +420,57 @@ export function AdminPanel() {
           required
         />
 
-        <label className="mt-4 flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.featured}
-            onChange={(e) => setForm({ ...form, featured: e.target.checked })}
-            className="accent-neon-green"
-          />
-          <span className="font-mono text-sm text-gray-400">Featured (Hot badge)</span>
-        </label>
+        <div className="mt-4 flex flex-wrap items-center gap-6">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.featured}
+              onChange={(e) => setForm({ ...form, featured: e.target.checked })}
+              className="accent-neon-green"
+            />
+            <span className="font-mono text-sm text-gray-400">Featured (Hot badge)</span>
+          </label>
+
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm text-gray-400">Category:</span>
+            <div className="flex overflow-hidden rounded-lg border border-white/10">
+              {(["available", "upcoming"] as ToolStatus[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setForm({ ...form, status: s })}
+                  className={`px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors ${
+                    form.status === s
+                      ? s === "upcoming"
+                        ? "bg-neon-gold/15 text-neon-gold"
+                        : "bg-neon-green/15 text-neon-green"
+                      : "text-gray-500 hover:text-gray-300"
+                  }`}
+                >
+                  {s === "upcoming" ? "🔮 Upcoming" : "✓ Available"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {form.status === "upcoming" && (
+          <p className="mt-2 font-mono text-[11px] text-neon-gold/80">
+            Upcoming tools show a &quot;coming soon&quot; card with no downloads.
+          </p>
+        )}
 
         <button type="submit" disabled={creating} className="btn-neon mt-4 px-6 py-2.5 disabled:opacity-50">
-          {creating ? "Creating..." : "Create Tool"}
+          {creating ? "Creating..." : form.status === "upcoming" ? "Add Upcoming Tool" : "Create Tool"}
         </button>
       </form>
+
+      <RequestsSection
+        requests={requests}
+        onAccept={(id) => handleRequestAction(id, "accept")}
+        onReject={(id) => handleRequestAction(id, "reject")}
+        onDelete={handleRequestDelete}
+      />
 
       <h2 className="font-display text-xl font-bold text-white mb-4">
         Manage Tools ({tools.length})
@@ -387,11 +486,16 @@ export function AdminPanel() {
             <div key={tool.id} className="rounded-2xl border border-white/8 bg-card p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-display text-lg font-bold text-white">{tool.name}</h3>
                     {tool.featured && (
                       <span className="hot-badge font-mono text-[9px] uppercase px-2 py-0.5">
                         🔥 Hot
+                      </span>
+                    )}
+                    {tool.status === "upcoming" && (
+                      <span className="rounded border border-neon-gold/40 bg-neon-gold/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neon-gold">
+                        🔮 Upcoming
                       </span>
                     )}
                   </div>
@@ -495,6 +599,102 @@ export function AdminPanel() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestsSection({
+  requests,
+  onAccept,
+  onReject,
+  onDelete,
+}: {
+  requests: ToolRequest[];
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const pending = requests.filter((r) => r.status === "pending");
+  const handled = requests.filter((r) => r.status !== "pending");
+
+  const statusBadge = (status: ToolRequest["status"]) => {
+    if (status === "accepted")
+      return "border-neon-green/40 bg-neon-green/10 text-neon-green";
+    if (status === "rejected")
+      return "border-red-500/40 bg-red-500/10 text-red-400";
+    return "border-neon-gold/40 bg-neon-gold/10 text-neon-gold";
+  };
+
+  return (
+    <div className="mb-12">
+      <h2 className="font-display text-xl font-bold text-white mb-1">
+        Tool Requests ({pending.length} pending)
+      </h2>
+      <p className="mb-4 font-mono text-xs text-gray-600">
+        Accept a request to add it to the Upcoming category automatically.
+      </p>
+
+      {requests.length === 0 ? (
+        <p className="text-gray-500 font-mono text-sm">No requests yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {[...pending, ...handled].map((req) => (
+            <div
+              key={req.id}
+              className="rounded-2xl border border-white/8 bg-card p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-display text-base font-bold text-white">
+                      {req.name}
+                    </h3>
+                    <span
+                      className={`rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${statusBadge(req.status)}`}
+                    >
+                      {req.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-400">{req.description}</p>
+                  {req.contact && (
+                    <p className="mt-1 font-mono text-xs text-neon-green">
+                      📨 {req.contact}
+                    </p>
+                  )}
+                  <p className="mt-1 font-mono text-[10px] text-gray-600">
+                    {new Date(req.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 flex-col gap-2">
+                  {req.status === "pending" && (
+                    <>
+                      <button
+                        onClick={() => onAccept(req.id)}
+                        className="rounded-lg border border-neon-green/30 bg-neon-green/10 px-3 py-1 font-mono text-xs text-neon-green hover:bg-neon-green/20"
+                      >
+                        Accept → Upcoming
+                      </button>
+                      <button
+                        onClick={() => onReject(req.id)}
+                        className="rounded-lg border border-white/10 px-3 py-1 font-mono text-xs text-gray-400 hover:bg-white/5"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => onDelete(req.id)}
+                    className="rounded-lg border border-red-500/20 px-3 py-1 font-mono text-xs text-red-400 hover:bg-red-500/10"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}

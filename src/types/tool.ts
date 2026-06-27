@@ -14,16 +14,34 @@ export interface PlatformDownload {
   storagePath?: string;
 }
 
+export type ToolStatus = "available" | "upcoming";
+
 export interface Tool {
   id: string;
   name: string;
   description: string;
   version: string;
   featured: boolean;
+  status: ToolStatus;
   tags: string[];
   downloads: Partial<Record<DownloadTarget, PlatformDownload>>;
   createdAt: string;
   updatedAt: string;
+}
+
+export type RequestStatus = "pending" | "accepted" | "rejected";
+
+export interface ToolRequest {
+  id: string;
+  name: string;
+  description: string;
+  contact?: string;
+  status: RequestStatus;
+  createdAt: string;
+}
+
+export function isValidToolStatus(value: string): value is ToolStatus {
+  return value === "available" || value === "upcoming";
 }
 
 export const DOWNLOAD_TARGETS: DownloadTarget[] = [
