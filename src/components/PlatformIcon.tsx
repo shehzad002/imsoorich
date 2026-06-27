@@ -21,6 +21,7 @@ function WindowsIcon({ className }: { className: string }) {
 }
 
 function LinuxIcon({ className }: { className: string }) {
+  // Official Tux mascot, rebuilt with proper proportions and coloring.
   return (
     <svg
       className={className}
@@ -28,26 +29,33 @@ function LinuxIcon({ className }: { className: string }) {
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Tux body */}
+      {/* Body silhouette */}
       <path
-        fill="#111111"
-        d="M12 2.5c-2.8 0-5 2.1-5 4.8 0 1 .3 1.9.7 2.6-.5.3-.9.7-1.2 1.2-.5.8-.7 1.7-.7 2.6 0 2.2 1.4 4.1 3.4 4.9-.2.6-.3 1.2-.3 1.8 0 1.5 1.2 2.7 2.7 2.7h1.8c1.5 0 2.7-1.2 2.7-2.7 0-.6-.1-1.2-.3-1.8 2-.8 3.4-2.7 3.4-4.9 0-.9-.2-1.8-.7-2.6-.3-.5-.7-.9-1.2-1.2.4-.7.7-1.6.7-2.6 0-2.7-2.2-4.8-5-4.8z"
+        fill="#1A1A1A"
+        d="M12 2c-2.5 0-4 2-4 4.3 0 .7.1 1.3.2 1.8.1.6-.4 1.1-1.3 2.2C5.7 11.9 5 13.6 5 15.5c0 .6.1 1.1.3 1.6-.35.35-.68.86-.95 1.45-.32.7-.2 1.3.12 1.62.22.22.5.32.8.32.22.5.6.88 1.18 1 .53.1 1.02-.1 1.42-.42.62.32 1.34.5 2.13.5s1.5-.18 2.13-.5c.4.32.9.52 1.42.42.58-.12.96-.5 1.18-1 .3 0 .58-.1.8-.32.32-.32.44-.92.12-1.62-.27-.59-.6-1.1-.95-1.45.2-.5.3-1 .3-1.6 0-1.9-.7-3.6-1.9-5.2-.9-1.1-1.4-1.6-1.3-2.2.1-.5.2-1.1.2-1.8C16 4 14.5 2 12 2z"
       />
-      {/* White face / belly */}
-      <ellipse fill="#FFFFFF" cx="12" cy="9.2" rx="3.2" ry="3.8" />
-      {/* Eyes */}
-      <circle fill="#FFFFFF" cx="9.8" cy="7.8" r="1.15" />
-      <circle fill="#FFFFFF" cx="14.2" cy="7.8" r="1.15" />
-      <circle fill="#111111" cx="9.9" cy="7.9" r="0.55" />
-      <circle fill="#111111" cx="14.3" cy="7.9" r="0.55" />
+      {/* White belly */}
+      <path
+        fill="#FFFFFF"
+        d="M12 10c-1.9 0-3.3 2.3-3.3 5.4 0 2.4 1.5 4.3 3.3 4.3s3.3-1.9 3.3-4.3C15.3 12.3 13.9 10 12 10z"
+      />
+      {/* Eye whites */}
+      <ellipse fill="#FFFFFF" cx="10.7" cy="6" rx="1.05" ry="1.5" />
+      <ellipse fill="#FFFFFF" cx="13.3" cy="6" rx="1.05" ry="1.5" />
+      {/* Pupils */}
+      <ellipse fill="#1A1A1A" cx="11" cy="6.3" rx="0.5" ry="0.7" />
+      <ellipse fill="#1A1A1A" cx="13" cy="6.3" rx="0.5" ry="0.7" />
       {/* Beak */}
-      <path fill="#F0AD00" d="M12 9.8 10.6 11.2h2.8L12 9.8z" />
-      {/* Feet */}
-      <ellipse fill="#F0AD00" cx="9.8" cy="20.2" rx="1.6" ry="0.7" />
-      <ellipse fill="#F0AD00" cx="14.2" cy="20.2" rx="1.6" ry="0.7" />
-      {/* Wings */}
-      <ellipse fill="#111111" cx="7.2" cy="13.5" rx="1.4" ry="2.2" transform="rotate(18 7.2 13.5)" />
-      <ellipse fill="#111111" cx="16.8" cy="13.5" rx="1.4" ry="2.2" transform="rotate(-18 16.8 13.5)" />
+      <path fill="#F7A600" d="M10.85 7.3h2.3l-.5 1.25c-.25.5-1.05.5-1.3 0z" />
+      {/* Webbed feet */}
+      <path
+        fill="#F7A600"
+        d="M9.2 19.3c-.35.7-1 1.45-1.65 1.8-.5.27-.28.78.32.78h2.45c.4 0 .63-.3.6-.72l-.12-1.55c-.5-.4-1.27-.5-1.6-.31z"
+      />
+      <path
+        fill="#F7A600"
+        d="M14.8 19.3c.35.7 1 1.45 1.65 1.8.5.27.28.78-.32.78h-2.45c-.4 0-.63-.3-.6-.72l.12-1.55c.5-.4 1.27-.5 1.6-.31z"
+      />
     </svg>
   );
 }
